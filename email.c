@@ -24,8 +24,9 @@ PG_MODULE_MAGIC;
 
 typedef struct EmailAddress
 {
-	char		*local;
-	char		*domain;
+	int32		length;
+	char		local[MAX_CHARS];
+	char		domain[MAX_CHARS];
 }	EmailAddress;
 
 /*
@@ -84,7 +85,8 @@ Datum
 email_in(PG_FUNCTION_ARGS)
 {
 	char *str = PG_GETARG_CSTRING(0);
-	EmailAddress *result;
+	EmailAddress *result = (EmailAddress *) palloc(VARHDRSZ + 256);
+	SET_VARSIZE(result,VARHDRSZ + 256);
 
 	/* Scan string and split into substrings local and domain*/
 	int str_len = strlen(str);
@@ -113,9 +115,11 @@ email_in(PG_FUNCTION_ARGS)
 	local[i - 1] = '\0';
 
 	/* Allocate memory */ 
-	result = (EmailAddress *) palloc(sizeof(EmailAddress));
-	result->local = local;
-	result->domain = domain;
+	
+	memset(result->local,0,MAX_CHARS);
+	memset(result->domain,0,MAX_CHARS);
+	strcpy(result->local,local);
+	strcpy(result->domain,domain);
 	PG_RETURN_POINTER(result);
 }
 
