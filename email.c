@@ -51,33 +51,11 @@ Datum		email_ne(PG_FUNCTION_ARGS);
 Datum		email_ge(PG_FUNCTION_ARGS);
 Datum		email_gt(PG_FUNCTION_ARGS);
 Datum		email_cmp(PG_FUNCTION_ARGS);
+Datum		email_de(PG_FUNCTION_ARGS);
+Datum		email_dne(PG_FUNCTION_ARGS);
 
 
-/*****************************************************************************
- * Input/Output functions
- *****************************************************************************/
-
-PG_FUNCTION_INFO_V1(email_in);
-
-/*Datum*/
-/*email_in(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	char	   *str = PG_GETARG_CSTRING(0);*/
-/*	double		x,*/
-/*				y;*/
-/*	Complex    *result;*/
-
-/*	if (sscanf(str, " ( %lf , %lf )", &x, &y) != 2)*/
-/*		ereport(ERROR,*/
-/*				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),*/
-/*				 errmsg("invalid input syntax for complex: \"%s\"",*/
-/*						str)));*/
-
-/*	result = (Complex *) palloc(sizeof(Complex));*/
-/*	result->x = x;*/
-/*	result->y = y;*/
-/*	PG_RETURN_POINTER(result);*/
-/*}*/
+/* Function Prototypes */
 
 int isValidCharacter (char c);
 int getLocalStringEnd (char *str, int len);
@@ -85,7 +63,13 @@ int getDomainStringEnd (int start, char *str, int len);
 int checkLocalIsValid (char *local);
 int regexMatch (char *string, char *pattern);
 int email_cmp_internal(EmailAddress * a, EmailAddress * b);
+int domain_cmp_internal(EmailAddress * a, EmailAddress * b);
 
+/*****************************************************************************
+ * Input/Output functions
+ *****************************************************************************/
+
+PG_FUNCTION_INFO_V1(email_in);
 
 Datum
 email_in(PG_FUNCTION_ARGS)
@@ -132,7 +116,9 @@ email_in(PG_FUNCTION_ARGS)
 }
 
 
-
+/**
+   Verify that email address rules are satisfied.
+*/
 int checkLocalIsValid (char *local) {
 	int valid = TRUE;
 	if (! regexMatch(local,"^[A-Z]")) valid = FALSE;
@@ -349,7 +335,9 @@ email_send(PG_FUNCTION_ARGS)
 /*	return 0;*/
 /*}*/
 
-
+/**
+   Compares two EmailAddresses, domain first then local.
+*/
 int email_cmp_internal(EmailAddress * a, EmailAddress * b)
 {
 	int result = 0;
@@ -365,6 +353,20 @@ int email_cmp_internal(EmailAddress * a, EmailAddress * b)
          result = 1;
 	}
 	return result;
+}
+
+/**
+   Compares two EmailAddress' domains.
+*/
+int domain_cmp_internal(EmailAddress * a, EmailAddress * b)
+{
+   int result = 0;
+   if (strcasecmp(a->domain,b->domain) < 0)
+		result = -1;
+	else if (strcasecmp(a->domain,b->domain) > 0)
+		result = 1;
+
+   return result;
 }
 
 
@@ -401,18 +403,7 @@ email_eq(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(email_cmp_internal(a, b) == 0);
 }
 
-/* The Not Equal function <> */
 
-PG_FUNCTION_INFO_V1(email_ne);
-
-Datum
-email_ne(PG_FUNCTION_ARGS)
-{
-	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
-	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
-
-	PG_RETURN_BOOL(email_cmp_internal(a, b) != 0);
-}
 
 PG_FUNCTION_INFO_V1(email_ge);
 
@@ -446,3 +437,47 @@ email_cmp(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(email_cmp_internal(a, b));
 }
+
+
+/* The Not Equal function <> */
+
+PG_FUNCTION_INFO_V1(email_ne);
+
+Datum
+email_ne(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
+
+	PG_RETURN_BOOL(email_cmp_internal(a, b) != 0);
+}
+
+
+/* The domain equal function ~ */
+
+PG_FUNCTION_INFO_V1(email_de);
+
+Datum
+email_de(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
+
+	PG_RETURN_BOOL(domain_cmp_internal(a, b) == 0);
+}
+
+/* The domain not equal function !~ */
+
+PG_FUNCTION_INFO_V1(email_dne);
+
+Datum
+email_dne(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
+
+	PG_RETURN_BOOL(domain_cmp_internal(a, b) != 0);
+}
+
+
+

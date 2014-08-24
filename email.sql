@@ -131,6 +131,10 @@ CREATE FUNCTION email_ge(EmailAddress, EmailAddress) RETURNS bool
    AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
 CREATE FUNCTION email_gt(EmailAddress, EmailAddress) RETURNS bool
    AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_de(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_dne(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
 
 CREATE OPERATOR < (
    leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_lt,
@@ -166,6 +170,17 @@ CREATE OPERATOR <> (
    restrict = neqsel, join = neqjoinsel
 );
 
+CREATE OPERATOR ~ (
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_de,
+   commutator = ~ , negator = !~,
+   restrict = eqsel, join = eqjoinsel
+);
+
+CREATE OPERATOR !~ (
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_dne,
+   commutator = !~ , negator = ~,
+   restrict = neqsel, join = neqjoinsel
+);
 
 
 -- create the support function too
