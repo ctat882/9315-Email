@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <regex.h>
 
 #include "fmgr.h"
 #include "libpq/pqformat.h"		/* needed for send/recv functions */
@@ -38,17 +39,18 @@ typedef struct EmailAddress
 /* Functions concerning the reading and displaying of type EmailAddress */ 
 Datum		email_in(PG_FUNCTION_ARGS);
 Datum		email_out(PG_FUNCTION_ARGS);
-/*Datum		email_recv(PG_FUNCTION_ARGS);*/
-/*Datum		email_send(PG_FUNCTION_ARGS);*/
+Datum		email_recv(PG_FUNCTION_ARGS);
+Datum		email_send(PG_FUNCTION_ARGS);
 
 /* Functions concerning the reading and displaying of EmailAddress */ 
-/*Datum		email_add(PG_FUNCTION_ARGS);*/
-/*Datum		email_abs_lt(PG_FUNCTION_ARGS);*/
-/*Datum		email_abs_le(PG_FUNCTION_ARGS);*/
-/*Datum		email_abs_eq(PG_FUNCTION_ARGS);*/
-/*Datum		email_abs_ge(PG_FUNCTION_ARGS);*/
-/*Datum		email_abs_gt(PG_FUNCTION_ARGS);*/
-/*Datum		email_abs_cmp(PG_FUNCTION_ARGS);*/
+
+Datum		email_lt(PG_FUNCTION_ARGS);
+Datum		email_le(PG_FUNCTION_ARGS);
+Datum		email_eq(PG_FUNCTION_ARGS);
+Datum		email_ne(PG_FUNCTION_ARGS);
+Datum		email_ge(PG_FUNCTION_ARGS);
+Datum		email_gt(PG_FUNCTION_ARGS);
+Datum		email_cmp(PG_FUNCTION_ARGS);
 
 
 /*****************************************************************************
@@ -80,6 +82,10 @@ PG_FUNCTION_INFO_V1(email_in);
 int isValidCharacter (char c);
 int getLocalStringEnd (char *str, int len);
 int getDomainStringEnd (int start, char *str, int len);
+int checkLocalIsValid (char *local);
+int regexMatch (char *string, char *pattern);
+int email_cmp_internal(EmailAddress * a, EmailAddress * b);
+
 
 Datum
 email_in(PG_FUNCTION_ARGS)
@@ -112,8 +118,10 @@ email_in(PG_FUNCTION_ARGS)
 	}
 	char domain[i - (at_pos + 1)];
 	memcpy(domain, &str[at_pos],i - 1);
-	local[i - 1] = '\0';
+	domain[i - 1] = '\0';
 
+   checkLocalIsValid(local);
+   
 	/* Allocate memory */ 
 	
 	memset(result->local,0,MAX_CHARS);
@@ -121,6 +129,39 @@ email_in(PG_FUNCTION_ARGS)
 	strcpy(result->local,local);
 	strcpy(result->domain,domain);
 	PG_RETURN_POINTER(result);
+}
+
+
+
+int checkLocalIsValid (char *local) {
+	int valid = TRUE;
+	if (! regexMatch(local,"^[A-Z]")) valid = FALSE;
+	if (regexMatch(local,"\b[A-Z]+[A-Z0-9]*\b")) valid = FALSE;
+
+	if (!valid) {
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+				 errmsg("invalid input syntax for email address: \"%s\"",
+						local)));
+	}	
+	return valid;
+}
+
+/**
+	Regular Expression Match. Uses extended regex and ignores case.
+*/
+int regexMatch (char *string, char *pattern) {
+	int status;					// determine if error in compilation or execution
+	regex_t regex;				// store compiled regex
+	int match = FALSE;
+	// Compile regular expression
+	status = regcomp(&regex,pattern, REG_EXTENDED|REG_ICASE);
+	if (status) return (-1); 	// if not 0, error occured;
+	// Execute regular expression
+	status = regexec(&regex, string, (size_t) 0, NULL, 0);
+	regfree(&regex);
+	if (!status) match = TRUE;
+	return match;	
 }
 
 /**
@@ -226,33 +267,39 @@ email_out(PG_FUNCTION_ARGS)
  * These are optional.
  *****************************************************************************/
 
-/*PG_FUNCTION_INFO_V1(complex_recv);*/
+PG_FUNCTION_INFO_V1(email_recv);
 
-/*Datum*/
-/*complex_recv(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);*/
-/*	Complex    *result;*/
+Datum
+email_recv(PG_FUNCTION_ARGS)
+{
+	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
+	EmailAddress    *result = (EmailAddress *) palloc(VARHDRSZ + 256);
 
-/*	result = (Complex *) palloc(sizeof(Complex));*/
-/*	result->x = pq_getmsgfloat8(buf);*/
-/*	result->y = pq_getmsgfloat8(buf);*/
-/*	PG_RETURN_POINTER(result);*/
-/*}*/
+	const char *local = pq_getmsgstring(buf);
+	const char *domain = pq_getmsgstring(buf);
 
-/*PG_FUNCTION_INFO_V1(complex_send);*/
+   SET_VARSIZE(result,VARHDRSZ + 256);
+   memset(result->local,0,MAX_CHARS);
+	memset(result->domain,0,MAX_CHARS);
 
-/*Datum*/
-/*complex_send(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	Complex    *complex = (Complex *) PG_GETARG_POINTER(0);*/
-/*	StringInfoData buf;*/
+	strcpy(result->local,local);
+	strcpy(result->domain,domain);
+	PG_RETURN_POINTER(result);
+}
 
-/*	pq_begintypsend(&buf);*/
-/*	pq_sendfloat8(&buf, complex->x);*/
-/*	pq_sendfloat8(&buf, complex->y);*/
-/*	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));*/
-/*}*/
+PG_FUNCTION_INFO_V1(email_send);
+
+Datum
+email_send(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *email = (EmailAddress *) PG_GETARG_POINTER(0);
+	StringInfoData buf;
+
+	pq_begintypsend(&buf);
+	pq_sendstring(&buf, email->local);
+	pq_sendstring(&buf, email->domain);
+	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+}
 
 /*****************************************************************************
  * New Operators
@@ -290,7 +337,7 @@ email_out(PG_FUNCTION_ARGS)
 /*#define Mag(c)	((c)->x*(c)->x + (c)->y*(c)->y)*/
 
 /*static int*/
-/*complex_abs_cmp_internal(Complex * a, Complex * b)*/
+/*email_cmp_internal(EmailAddress * a, EmailAddress * b)*/
 /*{*/
 /*	double		amag = Mag(a),*/
 /*				bmag = Mag(b);*/
@@ -303,68 +350,99 @@ email_out(PG_FUNCTION_ARGS)
 /*}*/
 
 
-/*PG_FUNCTION_INFO_V1(complex_abs_lt);*/
+int email_cmp_internal(EmailAddress * a, EmailAddress * b)
+{
+	int result = 0;
 
-/*Datum*/
-/*complex_abs_lt(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	Complex    *a = (Complex *) PG_GETARG_POINTER(0);*/
-/*	Complex    *b = (Complex *) PG_GETARG_POINTER(1);*/
+	if (strcasecmp(a->domain,b->domain) < 0)
+		result = -1;
+	else if (strcasecmp(a->domain,b->domain) > 0)
+		result = 1;
+	else if (strcasecmp(a->domain,b->domain) == 0) {
+      if (strcasecmp(a->local,b->local) < 0)
+         result = -1;
+      else if (strcasecmp(a->local,b->local) > 0)
+         result = 1;
+	}
+	return result;
+}
 
-/*	PG_RETURN_BOOL(complex_abs_cmp_internal(a, b) < 0);*/
-/*}*/
 
-/*PG_FUNCTION_INFO_V1(complex_abs_le);*/
+PG_FUNCTION_INFO_V1(email_lt);
 
-/*Datum*/
-/*complex_abs_le(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	Complex    *a = (Complex *) PG_GETARG_POINTER(0);*/
-/*	Complex    *b = (Complex *) PG_GETARG_POINTER(1);*/
+Datum
+email_lt(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
 
-/*	PG_RETURN_BOOL(complex_abs_cmp_internal(a, b) <= 0);*/
-/*}*/
+	PG_RETURN_BOOL(email_cmp_internal(a, b) < 0);
+}
 
-/*PG_FUNCTION_INFO_V1(complex_abs_eq);*/
+PG_FUNCTION_INFO_V1(email_le);
 
-/*Datum*/
-/*complex_abs_eq(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	Complex    *a = (Complex *) PG_GETARG_POINTER(0);*/
-/*	Complex    *b = (Complex *) PG_GETARG_POINTER(1);*/
+Datum
+email_le(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
 
-/*	PG_RETURN_BOOL(complex_abs_cmp_internal(a, b) == 0);*/
-/*}*/
+	PG_RETURN_BOOL(email_cmp_internal(a, b) <= 0);
+}
 
-/*PG_FUNCTION_INFO_V1(complex_abs_ge);*/
+PG_FUNCTION_INFO_V1(email_eq);
 
-/*Datum*/
-/*complex_abs_ge(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	Complex    *a = (Complex *) PG_GETARG_POINTER(0);*/
-/*	Complex    *b = (Complex *) PG_GETARG_POINTER(1);*/
+Datum
+email_eq(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
 
-/*	PG_RETURN_BOOL(complex_abs_cmp_internal(a, b) >= 0);*/
-/*}*/
+	PG_RETURN_BOOL(email_cmp_internal(a, b) == 0);
+}
 
-/*PG_FUNCTION_INFO_V1(complex_abs_gt);*/
+/* The Not Equal function <> */
 
-/*Datum*/
-/*complex_abs_gt(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	Complex    *a = (Complex *) PG_GETARG_POINTER(0);*/
-/*	Complex    *b = (Complex *) PG_GETARG_POINTER(1);*/
+PG_FUNCTION_INFO_V1(email_ne);
 
-/*	PG_RETURN_BOOL(complex_abs_cmp_internal(a, b) > 0);*/
-/*}*/
+Datum
+email_ne(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
 
-/*PG_FUNCTION_INFO_V1(complex_abs_cmp);*/
+	PG_RETURN_BOOL(email_cmp_internal(a, b) != 0);
+}
 
-/*Datum*/
-/*complex_abs_cmp(PG_FUNCTION_ARGS)*/
-/*{*/
-/*	Complex    *a = (Complex *) PG_GETARG_POINTER(0);*/
-/*	Complex    *b = (Complex *) PG_GETARG_POINTER(1);*/
+PG_FUNCTION_INFO_V1(email_ge);
 
-/*	PG_RETURN_INT32(complex_abs_cmp_internal(a, b));*/
-/*}*/
+Datum
+email_ge(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
+
+	PG_RETURN_BOOL(email_cmp_internal(a, b) >= 0);
+}
+
+PG_FUNCTION_INFO_V1(email_gt);
+
+Datum
+email_gt(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
+
+	PG_RETURN_BOOL(email_cmp_internal(a, b) > 0);
+}
+
+PG_FUNCTION_INFO_V1(email_cmp);
+
+Datum
+email_cmp(PG_FUNCTION_ARGS)
+{
+	EmailAddress    *a = (EmailAddress *) PG_GETARG_POINTER(0);
+	EmailAddress    *b = (EmailAddress *) PG_GETARG_POINTER(1);
+
+	PG_RETURN_INT32(email_cmp_internal(a, b));
+}

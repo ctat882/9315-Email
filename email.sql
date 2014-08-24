@@ -49,30 +49,28 @@ CREATE FUNCTION email_out(EmailAddress)
 -- the binary input function 'complex_recv' takes a StringInfo buffer
 -- and turns its contents into the internal representation.
 
---CREATE FUNCTION complex_recv(internal)
---   RETURNS complex
---   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex'
---   LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_recv(internal)
+   RETURNS EmailAddress
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email'
+   LANGUAGE C IMMUTABLE STRICT;
 
 -- the binary output function 'complex_send' takes the internal representation
 -- and converts it into a (hopefully) platform-independent bytea string.
 
---CREATE FUNCTION complex_send(complex)
---   RETURNS bytea
---   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex'
---   LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_send(EmailAddress)
+   RETURNS bytea
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email'
+   LANGUAGE C IMMUTABLE STRICT;
 
 
 -- now, we can create the type. The internallength specifies the size of the
 -- memory block required to hold the type (we need two 8-byte doubles).
 
 CREATE TYPE EmailAddress (
---   internallength = 256,
    input = email_in,
-   output = email_out
---   receive = complex_recv,
---   send = complex_send,
---   alignment = double
+   output = email_out,
+   receive = email_recv,
+   send = email_send
 );
 
 
@@ -84,15 +82,22 @@ CREATE TYPE EmailAddress (
 -- eg. we can use it in a table
 
 CREATE TABLE test_email (
-	a 	EmailAddress,
-	b 	EmailAddress
+	x	EmailAddress,
+	y	EmailAddress
 );
 
 -- data for user-defined types are just strings in the proper textual
 -- representation.
 
 INSERT INTO test_email VALUES ('hello@world.com', 'This77@theRe.net');
---INSERT INTO test_email VALUES ('(33.0, 51.4)', '(100.42, 93.55)');
+
+
+INSERT INTO test_email VALUES ('jas@cse.unsw.edu.au', 'john-shepherd@hotmail.com');
+INSERT INTO test_email VALUES ('john.a.shepherd@gmail.com', 'J.Shepherd@unsw.edu.au');
+INSERT INTO test_email VALUES ('j.a.shepherd@acm.org', 'j-a-shepherd@bargain-hunter.com');
+INSERT INTO test_email VALUES ('jas@a-very-silly-domain.org', 'john1988@my-favourite.org');
+INSERT INTO test_email VALUES ('x-1@gmail.com', 'a@b.com');
+
 
 SELECT * FROM test_email;
 
@@ -104,47 +109,6 @@ SELECT * FROM test_email;
 --	arguments.)
 -----------------------------
 
--- first, define a function complex_add (also in complex.c)
-CREATE FUNCTION complex_add(complex, complex)
-   RETURNS complex
-   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex'
-   LANGUAGE C IMMUTABLE STRICT;
-
--- we can now define the operator. We show a binary operator here but you
--- can also define unary operators by omitting either of leftarg or rightarg.
-CREATE OPERATOR + (
-   leftarg = complex,
-   rightarg = complex,
-   procedure = complex_add,
-   commutator = +
-);
-
-
-SELECT (a + b) AS c FROM test_email;
-
--- Occasionally, you may find it useful to cast the string to the desired
--- type explicitly. :: denotes a type cast.
-
-SELECT  a + '(1.0,1.0)'::complex AS aa,
-        b + '(1.0,1.0)'::complex AS bb
-   FROM test_email;
-
-
------------------------------
--- Creating aggregate functions
---	you can also define aggregate functions. The syntax is somewhat
---	cryptic but the idea is to express the aggregate in terms of state
---	transition functions.
------------------------------
-
-CREATE AGGREGATE complex_sum (
-   sfunc = complex_add,
-   basetype = complex,
-   stype = complex,
-   initcond = '(0,0)'
-);
-
-SELECT complex_sum(a) FROM test_email;
 
 
 -----------------------------
@@ -155,58 +119,68 @@ SELECT complex_sum(a) FROM test_email;
 -----------------------------
 
 -- first, define the required operators
-CREATE FUNCTION complex_abs_lt(complex, complex) RETURNS bool
-   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex' LANGUAGE C IMMUTABLE STRICT;
-CREATE FUNCTION complex_abs_le(complex, complex) RETURNS bool
-   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex' LANGUAGE C IMMUTABLE STRICT;
-CREATE FUNCTION complex_abs_eq(complex, complex) RETURNS bool
-   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex' LANGUAGE C IMMUTABLE STRICT;
-CREATE FUNCTION complex_abs_ge(complex, complex) RETURNS bool
-   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex' LANGUAGE C IMMUTABLE STRICT;
-CREATE FUNCTION complex_abs_gt(complex, complex) RETURNS bool
-   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_lt(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_le(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_eq(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_ne(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_ge(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_gt(EmailAddress, EmailAddress) RETURNS bool
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
 
 CREATE OPERATOR < (
-   leftarg = complex, rightarg = complex, procedure = complex_abs_lt,
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_lt,
    commutator = > , negator = >= ,
    restrict = scalarltsel, join = scalarltjoinsel
 );
 CREATE OPERATOR <= (
-   leftarg = complex, rightarg = complex, procedure = complex_abs_le,
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_le,
    commutator = >= , negator = > ,
    restrict = scalarltsel, join = scalarltjoinsel
 );
 CREATE OPERATOR = (
-   leftarg = complex, rightarg = complex, procedure = complex_abs_eq,
-   commutator = = ,
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_eq,
+   commutator = = , negator = <>,
    -- leave out negator since we didn't create <> operator
    -- negator = <> ,
    restrict = eqsel, join = eqjoinsel
 );
 CREATE OPERATOR >= (
-   leftarg = complex, rightarg = complex, procedure = complex_abs_ge,
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_ge,
    commutator = <= , negator = < ,
    restrict = scalargtsel, join = scalargtjoinsel
 );
 CREATE OPERATOR > (
-   leftarg = complex, rightarg = complex, procedure = complex_abs_gt,
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_gt,
    commutator = < , negator = <= ,
    restrict = scalargtsel, join = scalargtjoinsel
 );
 
+CREATE OPERATOR <> (
+   leftarg = EmailAddress, rightarg = EmailAddress, procedure = email_ne,
+   commutator = <> , negator = = ,
+   restrict = neqsel, join = neqjoinsel
+);
+
+
+
 -- create the support function too
-CREATE FUNCTION complex_abs_cmp(complex, complex) RETURNS int4
-   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/complex' LANGUAGE C IMMUTABLE STRICT;
+CREATE FUNCTION email_cmp(EmailAddress, EmailAddress) RETURNS int4
+   AS '/srvr/ctat882/postgresql-9.3.4/src/tutorial/email' LANGUAGE C IMMUTABLE STRICT;
 
 -- now we can make the operator class
-CREATE OPERATOR CLASS complex_abs_ops
-    DEFAULT FOR TYPE complex USING btree AS
+CREATE OPERATOR CLASS email_ops
+    DEFAULT FOR TYPE EmailAddress USING btree AS
         OPERATOR        1       < ,
         OPERATOR        2       <= ,
         OPERATOR        3       = ,
         OPERATOR        4       >= ,
         OPERATOR        5       > ,
-        FUNCTION        1       complex_abs_cmp(complex, complex);
+        FUNCTION        1       email_cmp(EmailAddress, EmailAddress);
 
 
 -- now, we can define a btree index on complex types. First, let's populate
@@ -215,8 +189,8 @@ CREATE OPERATOR CLASS complex_abs_ops
 INSERT INTO test_email VALUES ('(56.0,-22.5)', '(-43.2,-0.07)');
 INSERT INTO test_email VALUES ('(-91.9,33.6)', '(8.6,3.0)');
 
-CREATE INDEX test_cplx_ind ON test_email
-   USING btree(a complex_abs_ops);
+CREATE INDEX test_eml_ind ON test_email
+   USING btree(x email_ops);
 
 SELECT * from test_email where a = '(56.0,-22.5)';
 SELECT * from test_email where a < '(56.0,-22.5)';
@@ -225,4 +199,4 @@ SELECT * from test_email where a > '(56.0,-22.5)';
 
 -- clean up the example
 DROP TABLE test_email;
-DROP TYPE complex CASCADE;
+DROP TYPE EmailAddress CASCADE;
