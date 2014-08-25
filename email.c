@@ -25,9 +25,9 @@ PG_MODULE_MAGIC;
 
 typedef struct EmailAddress
 {
-	int32		length;
-	char		local[MAX_CHARS];
-	char		domain[MAX_CHARS];
+	int32		length;              // Variable length data types need this
+	char		local[MAX_CHARS];    // the 'local' string
+	char		domain[MAX_CHARS];   // the 'domain' string
 }	EmailAddress;
 
 /*
@@ -42,7 +42,7 @@ Datum		email_out(PG_FUNCTION_ARGS);
 Datum		email_recv(PG_FUNCTION_ARGS);
 Datum		email_send(PG_FUNCTION_ARGS);
 
-/* Functions concerning the reading and displaying of EmailAddress */ 
+/* Functions concerning the operators on EmailAddress */ 
 
 Datum		email_lt(PG_FUNCTION_ARGS);
 Datum		email_le(PG_FUNCTION_ARGS);
@@ -61,9 +61,11 @@ int isValidCharacter (char c);
 int getLocalStringEnd (char *str, int len);
 int getDomainStringEnd (int start, char *str, int len);
 int checkLocalIsValid (char *local);
+int checkDomainIsValid (char *domain);
 int regexMatch (char *string, char *pattern);
 int email_cmp_internal(EmailAddress * a, EmailAddress * b);
 int domain_cmp_internal(EmailAddress * a, EmailAddress * b);
+void print_error (char *string);
 
 /*****************************************************************************
  * Input/Output functions
@@ -74,40 +76,45 @@ PG_FUNCTION_INFO_V1(email_in);
 Datum
 email_in(PG_FUNCTION_ARGS)
 {
+   // Get input string
 	char *str = PG_GETARG_CSTRING(0);
+	/* Create pointer to EmailAddress data structure, allocating
+	   memory to it. Then set the length element of the structure
+	   using the macro SET_VARSIZE.
+	   NOTE: VARHDRSZ = sizeof(int32) = 4 bytes.
+	*/
 	EmailAddress *result = (EmailAddress *) palloc(VARHDRSZ + 256);
 	SET_VARSIZE(result,VARHDRSZ + 256);
 
 	/* Scan string and split into substrings local and domain*/
-	int str_len = strlen(str);
-	int i = 0;
+	
+	int str_len = strlen(str);    // Get the length of the input string
+	int i = 0;                    // array index placeholder
+	// Iterate through the input string to the '@' symbol.
 	i = getLocalStringEnd(str, str_len);
-	if (!i) {
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-				 errmsg("invalid input syntax for email address: \"%s\"",
-						str)));
-	}
+	// If i == 0, then there is no local part.
+	if (!i) print_error(str);
+	
+	// create temporary local string
 	char local[i];
 	memcpy(local, &str[0],i - 1);
 	local[i - 1] = '\0';
-
+	
+   // store the position of the '@' (one to the right of)
 	int at_pos = i;
 	i = getDomainStringEnd (i,str,str_len);
-	if (!i) {
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-				 errmsg("invalid input syntax for email address: \"%s\"",
-						str)));
-	}
+	// If an error occured in getDomainStringEnd, send error.
+	if (!i) print_error(str);
+
+	// Create temporary domain string and copy content.
 	char domain[i - (at_pos + 1)];
 	memcpy(domain, &str[at_pos],i - 1);
 	domain[i - 1] = '\0';
 
-   checkLocalIsValid(local);
-   
-	/* Allocate memory */ 
-	
+   /* Validate local and domain strings */
+   if( ! checkLocalIsValid(local)) print_error(local);
+   if( ! checkDomainIsValid(domain)) print_error(domain);
+	/* Initialise EmailAddress data structure and copy in content */ 	
 	memset(result->local,0,MAX_CHARS);
 	memset(result->domain,0,MAX_CHARS);
 	strcpy(result->local,local);
@@ -117,24 +124,57 @@ email_in(PG_FUNCTION_ARGS)
 
 
 /**
-   Verify that email address rules are satisfied.
+   Send error message to psql, and print error message.
+   @PARAMS string: the string containing the error
 */
-int checkLocalIsValid (char *local) {
-	int valid = TRUE;
-	if (! regexMatch(local,"^[A-Z]")) valid = FALSE;
-	if (regexMatch(local,"\b[A-Z]+[A-Z0-9]*\b")) valid = FALSE;
-
-	if (!valid) {
-		ereport(ERROR,
+void print_error (char *string) {
+   ereport(ERROR,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for email address: \"%s\"",
-						local)));
-	}	
+						string)));
+   return;
+}
+
+
+/**
+   Verify that email address rules are satisfied for local.
+   @PARAMS local: The string to validate.
+   @RETURN: Returns TRUE (1) if the string is valid,
+            FALSE (0) otherwise. 
+*/
+int checkLocalIsValid (char *local) {
+	int valid = TRUE;    // valid is set to TRUE by default.
+
+	//TODO: insert regex tests here:
+	if (! regexMatch(local,"^[A-Z]")) valid = FALSE;
+//	if (regexMatch(local,"\b[A-Z]+[A-Z0-9]*\b")) valid = FALSE;
+
+	
+	
+	
 	return valid;
 }
 
+
+/**
+   Verify that email address rules are satisfied for domain.
+   @PARAMS domain: The string to validate.
+   @RETURN: Returns TRUE (1) if the string is valid,
+            FALSE (0) otherwise. 
+*/
+int checkDomainIsValid (char *domain) {
+	int valid = TRUE;
+	// TODO: Put your domain validation regex here:
+	
+	
+	return valid;
+}
 /**
 	Regular Expression Match. Uses extended regex and ignores case.
+	@PARAMS  string: The string to check.
+	         pattern: The regex pattern to check against.
+	@RETURN: If there is a match, the function will return TRUE (int 1),
+	         otherwise FALSE (0).
 */
 int regexMatch (char *string, char *pattern) {
 	int status;					// determine if error in compilation or execution
@@ -146,6 +186,7 @@ int regexMatch (char *string, char *pattern) {
 	// Execute regular expression
 	status = regexec(&regex, string, (size_t) 0, NULL, 0);
 	regfree(&regex);
+	// if status == 0, then there is a match.
 	if (!status) match = TRUE;
 	return match;	
 }
@@ -216,20 +257,18 @@ int getLocalStringEnd (char *str, int len) {
 	return end_pos;
 }
 
+/**
+   Checks ASCII values for invalid characters.
+   @PARAMS c: the character to check.
+   @RETURN: Returns TRUE (1) if character is valid,
+            FALSE (0) otherwise.
+*/
 int isValidCharacter (char c) {
 	int valid = TRUE;
-	if ( c < 48 && c != 46 && c != 45) {
-		valid = FALSE;
-	}
-	else if (c > 57 && c < 64) {
-		valid = FALSE;
-	}
-	else if (c > 90 && c < 97) {
-		valid = FALSE;
-	}
-	else if (c > 122) {
-		valid = FALSE;
-	}
+	if ( c < 48 && c != 46 && c != 45) valid = FALSE;	
+	else if (c > 57 && c < 64)	valid = FALSE;
+	else if (c > 90 && c < 97)	valid = FALSE;
+	else if (c > 122)	valid = FALSE;
 	return valid;
 }
 

@@ -81,9 +81,9 @@ CREATE TYPE EmailAddress (
 
 -- eg. we can use it in a table
 
-CREATE TABLE test_email (
-	x	EmailAddress,
-	y	EmailAddress
+CREATE TABLE test_email ( 
+   x  EmailAddress,
+   y  EmailAddress
 );
 
 -- data for user-defined types are just strings in the proper textual
@@ -97,7 +97,8 @@ INSERT INTO test_email VALUES ('john.a.shepherd@gmail.com', 'J.Shepherd@unsw.edu
 INSERT INTO test_email VALUES ('j.a.shepherd@acm.org', 'j-a-shepherd@bargain-hunter.com');
 INSERT INTO test_email VALUES ('jas@a-very-silly-domain.org', 'john1988@my-favourite.org');
 INSERT INTO test_email VALUES ('x-1@gmail.com', 'a@b.com');
-
+INSERT INTO test_email VALUES ('joe@cse.unsw.edu.au', 'bob@hotmail.com');
+INSERT INTO test_email VALUES ('joe@cse.UNSW.edu.au', 'bob@hotmail.COM');
 
 SELECT * FROM test_email;
 
@@ -201,16 +202,19 @@ CREATE OPERATOR CLASS email_ops
 -- now, we can define a btree index on complex types. First, let's populate
 -- the table. Note that postgres needs many more tuples to start using the
 -- btree index during selects.
-INSERT INTO test_email VALUES ('(56.0,-22.5)', '(-43.2,-0.07)');
-INSERT INTO test_email VALUES ('(-91.9,33.6)', '(8.6,3.0)');
+
 
 CREATE INDEX test_eml_ind ON test_email
    USING btree(x email_ops);
 
-SELECT * from test_email where a = '(56.0,-22.5)';
-SELECT * from test_email where a < '(56.0,-22.5)';
-SELECT * from test_email where a > '(56.0,-22.5)';
-
+SELECT * from test_email where x = 'jas@cse.unsw.edu.au';
+SELECT * from test_email where x < 'jas@cse.unsw.edu.au';
+SELECT * from test_email where x > 'jas@cse.unsw.edu.au';
+SELECT * from test_email where x >= 'jas@cse.unsw.edu.au';
+SELECT * from test_email where x <= 'jas@cse.unsw.edu.au';
+SELECT * from test_email where x <> 'jas@cse.unsw.edu.au';
+SELECT * from test_email where x ~ 'jas@cse.unsw.edu.au';
+SELECT * from test_email where x !~ 'jas@cse.unsw.edu.au';
 
 -- clean up the example
 DROP TABLE test_email;
