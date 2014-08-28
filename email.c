@@ -146,12 +146,11 @@ int checkLocalIsValid (char *local) {
 	int valid = TRUE;    // valid is set to TRUE by default.
 
 	//TODO: insert regex tests here:
+//	if(! regexMatch(local,"((^[a-zA-Z])+(([-]*[a-zA-z0-9]))*(([\.])([a-zA-Z])+(([-]*[a-zA-z0-9]))*)*)$")) valid = FALSE;
+
 	if (! regexMatch(local,"^[A-Z]")) valid = FALSE;
 //	if (regexMatch(local,"\b[A-Z]+[A-Z0-9]*\b")) valid = FALSE;
 
-	
-	
-	
 	return valid;
 }
 
@@ -165,7 +164,8 @@ int checkLocalIsValid (char *local) {
 int checkDomainIsValid (char *domain) {
 	int valid = TRUE;
 	// TODO: Put your domain validation regex here:
-	
+
+//	if (! regexMatch(local,"((^[a-zA-Z])+(([-]*[a-zA-z0-9]))*(([\.])([a-zA-Z])+(([-]*[a-zA-z0-9]))*)+)$")) valid = FALSE;
 	
 	return valid;
 }
