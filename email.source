@@ -217,5 +217,5 @@ SELECT * from test_email where x ~ 'jas@cse.unsw.edu.au';
 SELECT * from test_email where x !~ 'jas@cse.unsw.edu.au';
 
 -- clean up the example
-DROP TABLE test_email;
-DROP TYPE EmailAddress CASCADE;
+--DROP TABLE test_email;
+--DROP TYPE EmailAddress CASCADE;
